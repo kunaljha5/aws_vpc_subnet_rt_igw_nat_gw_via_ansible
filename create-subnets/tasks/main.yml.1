@@ -1,0 +1,80 @@
+---
+# tasks file for create-subnets
+
+- name: Shell to fetch the vpc_id
+  shell: |
+         echo "select vpc_id from vpc_net where owner='{{ vpc_owner }}' and name='{{ name_vpc }}'" > get.sql
+         mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -s -N <./get.sql  2>/dev/null
+  register: output
+
+
+- set_fact:
+    vpc_id: "{{ output.stdout }}"
+
+    #- debug:
+    #    msg: "{{ vpc_id }}"
+
+
+- name: shell module to table vpc_ already configured.
+  shell: |
+         mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -s -N -e "select count(*) from vpc_subnet where vpc_id='{{ vpc_id }}'";
+  register: subnets_verify
+
+#- debug:
+#    msg: "{{ igw_verify }}"
+
+
+- ec2_vpc_subnet:
+    state: present
+    vpc_id: "{{ vpc_id }}"
+    cidr: "{{ item.cicdr_block }}"
+    region: "{{ aws_region }}"
+    az: "{{ item.az }}"
+    resource_tags:
+      Name: "{{ item.subnet_name }}"
+      Project: "{{ vpc_project }}"
+      Owner: "{{ vpc_owner }}"
+    wait: yes
+    map_public: "{{ item.map_public }}"
+  when: subnets_verify.stdout == "0"
+  with_items:
+         - { cicdr_block: "{{ cicdr_block1 }}" , az: "{{ az1 }}" , subnet_name : "private-{{ subnet_name }}-1" , map_public: no }
+         - { cicdr_block: "{{ cicdr_block2 }}" , az: "{{ az2 }}" , subnet_name : "private-{{ subnet_name }}-2" , map_public: no }
+         - { cicdr_block: "{{ cicdr_block3 }}" , az: "{{ az1 }}" , subnet_name : "public-{{ subnet_name }}-1" , map_public: yes }
+         - { cicdr_block: "{{ cicdr_block4 }}" , az: "{{ az2 }}" , subnet_name : "public-{{ subnet_name }}-2" , map_public: no }
+
+- set_fact:
+    subnet_name: "private-{{ subnet_name }}-1"
+
+- ec2_vpc_subnet_facts:
+    filters:
+      vpc-id: "{{ vpc_id }}"
+      "tag:Name": "{{ subnet_name }}"
+    region: "{{ aws_region }}" 
+  register: subnet_with_vpc_id
+
+- debug:
+    msg: "{{ subnet_with_vpc_id.subnets }}"
+ 
+- set_fact:
+    name: "{{ item.tags.Name }}"
+    vpc_id: "{{ item.vpc_id }}"
+    subnet_id: "{{ item.subnet_id }}"
+    availability_zone: "{{ item.availability_zone }}"
+    availability_zone_id: "{{ item.availability_zone_id }}"
+    avaibility_ip_count: "{{ item.available_ip_address_count }}"
+    cidr_block: "{{ item.cidr_block }}"
+    map_public_ip_on_launch: "{{ item.map_public_ip_on_launch }}"
+    owner_id: "{{ item.owner_id }}"
+    state: "{{ item.state }}"
+    subnet_arn: "{{ item.subnet_arn }}"
+    tag1: "{{ item.tags.Name }}"
+    tag2: "{{ item.tags.Owner }}"
+    tag3: "{{ item.tags.Project }}"
+  with_items: "{{ subnet_with_vpc_id.subnets }}"
+
+- name: shell mysql insert query to update database 
+  shell: |
+         var1=$(date '+%s')
+         echo "insert into vpc_subnet ( name, vpc_id, subnet_id, availability_zone, availability_zone_id , available_ip_address_count , cidr_block , map_public_ip_on_launch , owner_id , state , subnet_arn , tag1, tag2, tag3) values ( '{{ name }}', '{{ vpc_id }}', '{{ subnet_id }}','{{ availability_zone }}',  '{{ availability_zone_id }}', '{{ avaibility_ip_count }}', '{{ cidr_block }}', '{{ map_public_ip_on_launch }}','{{ owner_id }}', '{{ state }}', '{{ subnet_arn }}','{{ tag1 }}','{{ tag2 }}', '{{ tag3 }}' )" > ./meta_$var1.sql
+         mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} < meta_$var1.sql

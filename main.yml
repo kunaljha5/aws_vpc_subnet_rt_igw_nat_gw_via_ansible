@@ -1,0 +1,8 @@
+---
+ - name: create vpc on aws
+   hosts: localhost
+   roles:
+      - create-vpc   
+      - create-igw
+      - create-subnets
+      - create-rt

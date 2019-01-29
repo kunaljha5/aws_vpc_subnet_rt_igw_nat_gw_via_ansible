@@ -1,0 +1,18 @@
+---
+name_vpc : megadream-vpc
+ip_cidr_block : 172.24.132.0/24
+aws_region : us-east-1
+vpc_project : MegaDream
+vpc_owner : jayajha
+vpc_tenancy : dedicated
+dbuser : kunal
+dbpass : password
+database: ansible_aws
+cicdr_block1: 172.24.132.0/28
+cicdr_block2: 172.24.132.16/28
+cicdr_block3: 172.24.132.32/28
+cicdr_block4: 172.24.132.48/28
+subnet_name: megadream-vpc
+az1: us-east-1a
+az2: us-east-1b
+

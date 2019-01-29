@@ -1,0 +1,12 @@
+- name: Ansible find files to be deleted
+  find:
+    paths: ./
+    patterns: '*.sql'
+  register: files_to_delete
+
+- name: Ansible remove file from find result
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  with_items: "{{ files_to_delete.files }}"
+

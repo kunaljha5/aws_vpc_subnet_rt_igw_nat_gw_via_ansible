@@ -1,0 +1,50 @@
+---
+# tasks file for database-init
+#
+ 
+- name: VERIFY DB LOGIN
+  shell: |
+         mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -Nse "select database()"
+  register: verify_db_login
+
+- name: DROP TABLE ANSIBLE_AWS.VPC_NET
+  command: >
+           mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -Nse  "DROP TABLE IF EXISTS vpc_net"
+  register: drop_vpc_net
+
+- name: CREATE TABLE ANSIBLE_AWS.VPC_NET
+  command: >
+           mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -Nse "CREATE TABLE IF NOT EXISTS  vpc_net (  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(20),  vpc_id VARCHAR(40) , instance_tenancy VARCHAR(40),   owner VARCHAR(20), cidr_block VARCHAR(30), owner_id VARCHAR(40), state VARCHAR(40), is_default VARCHAR(10),tag1 VARCHAR(20), tag2 VARCHAR(20), tag3 VARCHAR(20), creation datetime default current_timestamp);"
+  register: create_vpc_net
+
+- name: DROP TABLE ANSIBLE_AWS.VPC_IGW
+  command: >
+           mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -Nse " DROP TABLE IF EXISTS vpc_igw"
+  register: drop_vpc_igw
+
+- name: CREATE TABLE ANSIBLE_AWS.VPC_IGW
+  command: >
+           mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -Nse "CREATE TABLE IF NOT EXISTS  vpc_igw (  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(20), vpc_id VARCHAR(40) , gateway_id VARCHAR(40),   tag1 VARCHAR(20), tag2 VARCHAR(20), tag3 VARCHAR(20), creation datetime default current_timestamp);"
+  register: crerate_vpc_igw
+
+
+- name: DROP TABLE ANSIBLE_AWS.VPC_SUBNET
+  command: >
+           mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -Nse " DROP TABLE IF EXISTS vpc_subnet"
+  register: drop_vpc_subnet
+
+- name: CREATE TABLE ANSIBLE_AWS.VPC_SUBNET
+  command: >
+           mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -Nse "CREATE TABLE IF NOT EXISTS  vpc_subnet (  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(30), vpc_id VARCHAR(40) , subnet_id VARCHAR(40), availability_zone VARCHAR (20), availability_zone_id VARCHAR(15), available_ip_address_count INT, cidr_block VARCHAR(30), map_public_ip_on_launch VARCHAR (15), owner_id VARCHAR(20),  state VARCHAR(10), subnet_arn VARCHAR (200),     tag1 VARCHAR(30), tag2 VARCHAR(20), tag3 VARCHAR(20), creation datetime default current_timestamp);"
+  register: crerate_vpc_subnet
+
+- name: DROP TABLE ANSIBLE_AWS.VPC_RT
+  command: >
+           mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -Nse " DROP TABLE IF EXISTS vpc_rt"
+  register: drop_vpc_rt
+
+- name: CREATE TABLE ANSIBLE_AWS.VPC_RT
+  command: >
+           mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -Nse "CREATE TABLE IF NOT EXISTS  vpc_rt ( id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(30), vpc_id VARCHAR(40) , route_table_id VARCHAR(40), is_main VARCHAR(20), owner_id VARCHAR(20), tag1 VARCHAR(30), tag2 VARCHAR(20), tag3 VARCHAR(20), creation datetime default current_timestamp);"
+  register: crerate_vpc_rt
+

@@ -1,0 +1,80 @@
+---
+- name: Verify Environment vpc_net table
+  shell: |
+         mysql -u "{{ dbuser }}" -p"{{ dbpass }}" "{{ database }}" -s -N -e "show tables where Tables_in_ansible_aws!='vpc_net';" 1>/dev/null 2>/dev/null
+  register: verify_database
+
+
+ 
+
+- name: Verify Any VPC Provisioned Already  
+  shell: |
+         mysql -u "{{ dbuser }}" -p"{{ dbpass }}" "{{ database }}" -s -N -e "select * from vpc_net where owner='"{{ vpc_owner }}"' and name='"{{ name_vpc }}"';" 2>/dev/null 1>/dev/null 
+  register: vpc_found
+
+
+- name: Create a VPC with dedicated-default tenancy and a couple of tags
+  ec2_vpc_net:
+    name: "{{ name_vpc }}"
+    cidr_block: "{{ ip_cidr_block }}"
+    region: "{{ aws_region }}"
+    tags:
+      Project: "{{ vpc_project }}"
+      Owner: "{{ vpc_owner }}"
+    tenancy: "{{ vpc_tenancy }}"
+  register: vpc_net_output
+  when: vpc_found.stdout == ''
+
+- debug:
+    msg: "{{ item.tags.Name }}"
+  with_items:
+    - "{{ vpc_net_output.vpc }}"
+  when: vpc_found.stdout == ''
+- set_fact:
+    name: "{{ name_vpc }}"
+    vpc_id: "{{ item.id }}"
+    instance_tenancy: "{{ item.instance_tenancy }}"
+    owner: "{{ vpc_owner }}"
+    cidr_block: "{{ item.cidr_block }}"
+    owner_id: "{{ item.owner_id }}"
+    state: "{{ item.state }}"
+    is_default: "{{ item.is_default }}"
+    tag1: "{{ item.tags.Name }}"
+    tag2: "{{ item.tags.Owner }}"
+    tag3: "{{ item.tags.Project }}"
+  with_items:
+    -  "{{ vpc_net_output.vpc }}"   
+  when: vpc_found.stdout == '' and vpc_net_output.vpc.state  == "available" 
+
+
+
+- name: shell module to insert in mysql db
+  shell: |
+         var1=$(date '+%s')
+         echo "insert into vpc_net ( name, vpc_id, instance_tenancy, owner, cidr_block, owner_id , state, is_default, tag1, tag2, tag3) values ( '{{ name }}', '{{ vpc_id }}', '{{ instance_tenancy }}','{{ vpc_owner }}',  '{{ cidr_block }}', '{{ owner_id }}', '{{ state }}', '{{ is_default }}','{{ tag1 }}','{{ tag2 }}', '{{ tag3 }}' )" > ./meta_$var1.sql
+         mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} < meta_$var1.sql
+  register: shell_insert_output
+  when: vpc_found.stdout == ''
+
+- name: Shell module to delete 
+#  shell: rm -rf meta*.sql
+  file: 
+    path='meta*.sql' 
+    state=absent
+
+- fail:
+    msg: "The system may not be provisioned according to the CMDB status. {{ shell_insert_output }}"
+  when: vpc_found.stdout == '' and shell_insert_output.rc != 0
+
+- name: gather_facts
+  ec2_vpc_net_facts:
+     region: "{{ aws_region }}" 
+     filters:
+       "tag:Project": "{{ vpc_project }}"
+  register: verify_data
+
+- debug: 
+    msg: "{{ item }}"
+  with_items:
+    -  "{{ verify_data.vpcs }}"
+

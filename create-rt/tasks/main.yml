@@ -1,0 +1,173 @@
+---
+# tasks file for create-rt
+
+
+- name: Shell to fetch the vpc_id
+  shell: |
+         echo "select vpc_id from vpc_net where owner='{{ vpc_owner }}' and name='{{ name_vpc }}'" > get.sql
+         mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -s -N <./get.sql  2>/dev/null
+  register: output
+
+
+- set_fact:
+    vpc_id: "{{ output.stdout }}"
+
+# Gather facts about any VPC route table within VPC with ID vpc-abcdef00
+- ec2_vpc_route_table_facts:
+    filters:
+      vpc-id: "{{ vpc_id }}"
+      association.main: "true"
+    region: "{{ aws_region }}"
+  register: normal
+
+- debug:
+    msg: "{{ normal.route_tables[0].id }}"
+
+- set_fact:
+    main_rt_id: "{{ normal.route_tables[0].id }}"
+
+- name: Shell to fetch the subnet id Private 1
+  shell: |
+         echo "select subnet_id from vpc_subnet where tag2='{{ vpc_owner }}'  and name='private-{{ name_vpc }}-1'" > get.sql
+         mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -s -N <./get.sql  2>/dev/null
+  register: priv_output_1
+
+- set_fact:
+    private_subnet1: "{{ priv_output_1.stdout }}"
+
+
+
+
+- name: Shell to fetch the subnet id Private 2
+  shell: |
+         echo "select subnet_id from vpc_subnet where tag2='{{ vpc_owner }}' and name='private-{{ name_vpc }}-2'" > get.sql
+         mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -s -N <./get.sql  2>/dev/null
+  register: priv_output_2
+
+- set_fact:
+    private_subnet2: "{{ priv_output_2.stdout }}"
+
+
+- name: Shell to fetch the subnet id Public 1
+  shell: |
+         echo "select subnet_id from vpc_subnet where tag2='{{ vpc_owner }}'  and name='public-{{ name_vpc }}-2'" > get.sql
+         mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -s -N <./get.sql  2>/dev/null
+  register: pub_output_2
+
+- set_fact:
+    public_subnet2: "{{ pub_output_2.stdout }}"
+
+
+- name: Shell to fetch the subnet id Public 2
+  shell: |
+         echo "select subnet_id from vpc_subnet where tag2='{{ vpc_owner }}'  and name='public-{{ name_vpc }}-1'" > get.sql
+         mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -s -N <./get.sql  2>/dev/null
+  register: pub_output_1
+
+- set_fact:
+    public_subnet1: "{{ pub_output_1.stdout }}"
+
+- shell: |
+         echo "select gateway_id from vpc_igw where vpc_id='{{ vpc_id }}'" > get.sql
+         mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -s -N <./get.sql  2>/dev/null
+  register: igwid
+
+- set_fact:
+    igw: "{{ igwid.stdout }}"
+
+- name: Set up Public-RT
+  ec2_vpc_route_table:
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ aws_region }}"
+    lookup: id
+    tags:
+      Name: "{{ name_vpc }}-Public-RT"
+      Project: "{{ vpc_project }}"
+      Owner: "{{ vpc_owner }}"
+    route_table_id: "{{ main_rt_id }}"
+    subnets:
+      - "{{ public_subnet1 }}"
+      - "{{ public_subnet2 }}"
+    routes:
+      - dest: 0.0.0.0/0
+        gateway_id: "{{ igw }}"
+  register: pub_rt
+
+- name: Set up Private-RT
+  ec2_vpc_route_table:
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ aws_region }}"
+    tags:
+      Name: "{{ name_vpc }}-Private-RT"
+      Project: "{{ vpc_project }}"
+      Owner: "{{ vpc_owner }}"
+    subnets:
+      - "{{ private_subnet1 }}"
+      - "{{ private_subnet2 }}"
+  register: priv_rt
+
+- debug:
+    msg: "{{ pub_rt }}"
+
+- debug:
+    msg: "{{ priv_rt }}"
+
+- shell: |
+         mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} -Nse "select vpc_id from vpc_rt where vpc_id='{{ pub_rt.route_table.vpc_id }}';"
+  register: ma1
+
+
+- set_fact:
+    name: "{{ pub_rt.route_table.tags.Name }}"
+    vpc_id: "{{ pub_rt.route_table.vpc_id }}"
+    route_table_id: "{{ pub_rt.route_table.route_table_id }}"
+    is_main: true
+    owner_id: "{{ pub_rt.route_table.owner_id }}"
+    tag1: "{{ pub_rt.route_table.tags.Name }}"
+    tag2: "{{ pub_rt.route_table.tags.Owner }}"
+    tag3: "{{ pub_rt.route_table.tags.Project }}"
+  when: item.main == true
+  with_items: "{{ pub_rt.route_table.associations }}"
+  when: ma1.stdout == ""
+
+
+- shell: |
+         var1=$(date '+%s')
+         echo "insert into vpc_rt (name,vpc_id, route_table_id,is_main, owner_id, tag1, tag2, tag3) values ('{{ name  }}', '{{ vpc_id  }}', '{{ route_table_id  }}', '{{ is_main  }}', '{{ owner_id  }}', '{{ tag1  }}','{{ tag2  }}','{{ tag3    }}'    );" > meta_$var1.sql
+         mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} < meta_$var1.sql
+  when: ma1.stdout == ""
+
+
+
+- set_fact:
+    name: "{{ priv_rt.route_table.tags.Name }}"
+    vpc_id: "{{ priv_rt.route_table.vpc_id }}"
+    route_table_id: "{{ priv_rt.route_table.route_table_id }}"
+    is_main: false
+    owner_id: "{{ priv_rt.route_table.owner_id }}"
+    tag1: "{{ priv_rt.route_table.tags.Name }}"
+    tag2: "{{ priv_rt.route_table.tags.Owner }}"
+    tag3: "{{ priv_rt.route_table.tags.Project }}"
+  when: item.main == false
+  with_items: "{{ priv_rt.route_table.associations }}"
+  when: ma1.stdout == ""
+
+- shell: |
+         var1=$(date '+%s')
+         echo "insert into vpc_rt (name,vpc_id, route_table_id,is_main, owner_id, tag1, tag2, tag3) values ('{{ name  }}', '{{ vpc_id  }}', '{{ route_table_id  }}', '{{ is_main  }}', '{{ owner_id  }}', '{{ tag1  }}','{{ tag2  }}','{{ tag3    }}'    );" > meta_$var1.sql
+         mysql -u {{ dbuser }} -p{{ dbpass }} {{ database }} < meta_$var1.sql
+  when: ma1.stdout == ""
+
+
+- name: Create new nat gateway and allocate new EIP if a nat gateway does not yet exist in the subnet.
+  ec2_vpc_nat_gateway:
+    state: present
+    subnet_id: "{{ pub_output_2.stdout }}"
+    wait: yes
+    region: "{{ aws_region }}"
+    if_exist_do_not_create: true
+  register: new_nat_gateway
+
+- debug:
+    msg: "{{ new_nat_gateway }}"
+
